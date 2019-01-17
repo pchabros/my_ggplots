@@ -1,0 +1,348 @@
+---
+title: "Plots"
+author: "Paweł Chabros"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, dpi = 600)
+```
+
+### Loading libraries
+
+```{r libraries, message=FALSE}
+library(tidyverse)
+library(lubridate)
+library(wrapr)
+```
+
+### Setting plot theme
+
+```{r settings, message=FALSE}
+extrafont::loadfonts(device = 'win')
+
+roz_cz <- 12
+roz_cz_txt <- roz_cz / 3.597
+leg_sq <- .8
+
+theme_set(
+  theme_minimal(base_family = 'Calibri') +
+  theme(
+    panel.grid = element_blank(),
+    text = element_text(size = roz_cz),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.position = 'top',
+    legend.direction = 'horizontal',
+    legend.title = element_blank()
+  )
+)
+
+colors <- c(
+  rgb(66, 85, 136, maxColorValue = 255),
+  rgb(171, 177, 203, maxColorValue = 255),
+  rgb(0, 112, 192, maxColorValue = 255),
+  rgb(0, 160, 157, maxColorValue = 255),
+  rgb(102, 81, 161, maxColorValue = 255),
+  rgb(137, 173, 209, maxColorValue = 255),
+  rgb(162, 148, 201, maxColorValue = 255),
+  rgb(40, 50, 90, maxColorValue = 255),
+  rgb(82, 104, 165, maxColorValue = 255)
+)
+
+fmt <- function(x, n = 0) {
+  x %>%
+    round(n) %>%
+    format(big.mark = " ", decimal.mark = ',', trim = TRUE)
+}
+```
+
+### Loading the data
+
+```{r data, message=FALSE}
+data_list <- list()
+
+for (i in dir('data/')) {
+  data_list[[str_remove(i, '\\..*$')]] <- read_csv2(paste0('data/', i))
+}
+```
+
+### Barplot with totals
+
+```{r plot1, fig.align='center', fig.width=6}
+data_list$plot1 %>%
+  gather(type, n, 2:4) %>%
+  ggplot(aes(
+    x = year,
+    y = n,
+    fill = type,
+    label = n %>% fmt()
+  )) +
+  geom_col(col = 'white') +
+  geom_text(
+    position = position_stack(.5),
+    family = 'Calibri',
+    size = roz_cz_txt,
+    color = 'white'
+  ) +
+  geom_label(aes(
+    y = total + max(total) * .06,
+    label = total %>% fmt()),
+    family = 'Calibri',
+    size = roz_cz_txt,
+    fill = 'white',
+    color = colors[1],
+    label.padding = unit(0.1, 'lines'),
+    show.legend = FALSE
+  ) +
+  geom_label(aes(
+    x = 2015.78,
+    y = 500,
+    label = '    '
+  ),
+  size = 2.5,
+  fill = 'white',
+  color = colors[1],
+  label.padding = unit(0.1, 'lines')
+  ) +
+  geom_text(aes(
+    x = 2015.88,
+    y = 500,
+    label = 'total'
+  ),
+  family = 'Calibri',
+  size = roz_cz_txt,
+  hjust = 0,
+  check_overlap = TRUE
+  ) +
+  guides(fill = guide_legend(
+    keyheight = .8,
+    keywidth = .8
+  )) +
+  scale_fill_manual(values = colors[c(4, 3, 8)]) +
+  theme(
+    axis.text.y = element_blank(),
+    legend.spacing.x = unit(1, 'mm'),
+    legend.position = c(.45, .956),
+    plot.margin = margin(40, 5, 5, 5)
+  )
+```
+
+### Barplot with percentages
+
+```{r plot2, fig.align='center', fig.width=5}
+data_list$plot2 %>%
+  filter(year == 2017) %>% 
+  select(-1) %>%
+  gather(woj, n, -type) %>%
+  spread(type, n) %>%
+  mutate(wsp = accepted / submitted) %>%
+  gather(type, n, c(accepted, submitted)) %>%
+  mutate(
+    wsp_pos = wsp * max(n) + max(n) * 1.2,
+    wsp_lab = wsp_pos * 1.07,         
+    txt_pos = n + max(n) * .008
+  ) %>%
+  ggplot(
+    data = .,
+    aes(
+      x = woj %>% fct_rev(),
+      y = n,
+      fill = type,
+      label = n %>% fmt()
+  )) +
+  geom_segment(aes(
+      xend = woj %>% fct_rev(),
+      y = 0,
+      yend = wsp_pos
+    ),
+    linetype = 'dotted',
+    col = colors[4],
+    alpha = .7
+  ) +
+  geom_col(
+    position = position_dodge(.9),
+    col = 'white'
+  ) +
+  geom_text(
+    aes(y = n + 10),
+    position = position_dodge(.9),
+    family = 'Calibri',
+    size = roz_cz_txt - .4,
+    hjust = 0
+  ) +
+  geom_point(aes(
+      y = wsp_pos,
+      shape = 'success rate'
+    ),
+    fill = colors[4],
+    size = 6,
+    stroke = .1,
+    color = 'white'
+  ) +
+  geom_text(aes(
+      y = wsp_pos,
+      label = (wsp * 100) %>% round()
+    ),
+    family = 'Calibri',
+    color = 'white',
+    size = roz_cz_txt,
+    show.legend = FALSE
+  ) +
+  geom_text(aes(
+      y = wsp_pos,
+      label = '%'
+    ),
+    family = 'Calibri',
+    nudge_y = 170,
+    color = colors[4],
+    size = roz_cz_txt,
+    show.legend = FALSE
+  ) +
+  coord_flip() +
+  scale_fill_manual(values = colors[1:2]) +
+  scale_shape_manual(values = 21) +
+  guides(fill = guide_legend(
+    keyheight = leg_sq,
+    keywidth = leg_sq,
+    reverse = TRUE,
+    order = -1)
+  ) +
+  theme(
+    axis.text.x = element_blank(),
+    plot.margin = margin(t = 60),
+    legend.position = c(.412, 1.09),
+    legend.direction = 'horizontal',
+    legend.box = 'horizontal',
+    legend.spacing.x = unit(1, 'mm'),
+    legend.box.just = 'left',
+    legend.margin = margin(0, 0, 0, 0)
+  )
+```
+
+### Plot
+
+```{r plot3, fig.align='center', fig.width=5, fig.height=5}
+data_list$plot3 %>%
+  mutate(total = rowSums(.[2:6])) %>%
+  gather(type, n, -c(year, total)) %>%
+  mutate(
+    type = type %>% reorder(n),
+    year_pos = -max(n) * .1
+  ) %.>%
+  ggplot(
+    data = .,
+    aes(
+      x = year,
+      y = n)
+  ) +
+  geom_line(data = tibble(
+      x = c(2013:2017 - .4, 2013:2017 + .4),
+      y = max(.$n) * 1.02,
+      gr = rep(1:5, 2)
+    ),
+    aes(
+      x = x,
+      y = y,
+      group = gr
+    ),
+    color = colors[1]
+  ) +
+  geom_curve(data = tibble(
+      x = c(2013:2017 + .4, 2013:2017 - .45),
+      x2 = c(2013:2017 + .45, 2013:2017 - .4),
+      y = rep(c(max(.$n) * 1.02, max(.$n) * 1.01), each = 5),
+      y2 = rep(c(max(.$n) * 1.01, max(.$n) * 1.02), each =  5),
+      gr = 1:10
+    ),
+    aes(
+      x = x,
+      xend = x2,
+      y = y,
+      yend = y2,
+      group = gr
+    ),
+    color = colors[1],
+    curvature = .5
+  ) +
+  geom_col(
+    aes(fill = type),
+    position = position_dodge(.8),
+    width = .1
+  ) +
+  geom_line(data = tibble(
+      x = c(2013:2017 - .45, 2013:2017 + .45),
+      y = 0,
+      gr = rep(1:5, 2)
+    ),
+    aes(
+      x = x,
+      y = y,
+      group = gr
+    ),
+    color = colors[1]
+  ) +
+  geom_point(
+    aes(color = type),
+    position = position_dodge(.8),
+    size = 2
+  ) +
+  geom_point(
+    aes(y = year_pos),
+    size = 15,
+    color = colors[1],
+    show.legend = FALSE
+  ) +
+  geom_text(aes(
+      y = year_pos,
+      label = year
+    ),
+    check_overlap = TRUE,
+    color = 'white',
+    family = 'Calibri'
+  ) +
+  geom_text(aes(
+      y = max(.$n) * 1.05,
+      label = total %>% fmt()
+    ),
+    check_overlap = TRUE,
+    color = colors[1],
+    hjust = 0,
+    size = roz_cz_txt,
+    family = 'Calibri'
+  ) +
+  geom_label(aes(
+      y = n / 2,
+      group = type,
+      label = n %>% fmt()
+    ),
+    position = position_dodge(.8),
+    family = 'Calibri',
+    fill = 'white',
+    color = colors[1],
+    label.size = .2,
+    size = roz_cz_txt - .5,
+    label.padding = unit(0.1, 'lines'),
+    show.legend = FALSE
+  ) +
+  coord_flip() +
+  guides(color = guide_legend(
+      override.aes = list(size = 3),
+      keyheight = leg_sq,
+      keywidth = leg_sq,
+      reverse = TRUE
+    ),
+    fill = FALSE
+  ) +
+  scale_fill_manual(values = colors[c(1, 4, 8, 7, 3)]) +
+  scale_color_manual(values = colors[c(1, 4, 8, 7, 3)]) +
+  theme(
+    legend.spacing.x = unit(1, 'mm'),
+    axis.text = element_blank(),
+    legend.position = c(.5, 1.01),
+    plot.margin = margin(t = 15),
+    legend.direction = 'horizontal'
+  ) +
+  ylim(c(.$year_pos[1] * 1.1, max(.$n) * 1.12))
+```
+
