@@ -1,0 +1,9 @@
+kategoria;typ;val;n;wsp
+category A+;mean number of submissions per unit;31,40909091;44;0,350940666
+category A;mean number of submissions per unit;17,03082192;292;0,278302835
+category B;mean number of submissions per unit;9,346268657;335;0,152028106
+category C;mean number of submissions per unit;4,673076923;52;0,057613169
+category A+;mean number of accepted submissions per unit;11,27906977;43;0,350940666
+category A;mean number of accepted submissions per unit;5,914529915;234;0,278302835
+category B;mean number of accepted submissions per unit;2,850299401;167;0,152028106
+category C;mean number of accepted submissions per unit;1,555555556;9;0,057613169

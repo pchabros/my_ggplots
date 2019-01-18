@@ -1,0 +1,13 @@
+kiedy;n;rok;typ
+on time;78346;2015/2016;total
+delay;1;2015/2016;total
+waiting;24109;2015/2016;total
+default;42603;2015/2016;total
+on time;15345;2015/2016;subgroup 1
+delay;1;2015/2016;subgroup 1
+waiting;5760;2015/2016;subgroup 1
+default;8527;2015/2016;subgroup 1
+on time;2148;2015/2016;subgroup 2
+delay;0;2015/2016;subgroup 2
+waiting;524;2015/2016;subgroup 2
+default;648;2015/2016;subgroup 2

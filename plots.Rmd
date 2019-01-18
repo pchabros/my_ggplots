@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 ---
 title: "Plots"
 author: "Paweł Chabros"
@@ -11,9 +12,15 @@ knitr::opts_chunk$set(echo = TRUE, dpi = 600)
 ### Loading libraries
 
 ```{r libraries, message=FALSE}
+library(shadowtext)
+library(DescTools)
 library(tidyverse)
 library(lubridate)
+library(ggthemes)
+library(broom)
 library(wrapr)
+library(rgdal)
+library(waffle)
 ```
 
 ### Setting plot theme
@@ -47,13 +54,25 @@ colors <- c(
   rgb(137, 173, 209, maxColorValue = 255),
   rgb(162, 148, 201, maxColorValue = 255),
   rgb(40, 50, 90, maxColorValue = 255),
-  rgb(82, 104, 165, maxColorValue = 255)
+  rgb(82, 104, 165, maxColorValue = 255),
+  rgb(0, 115, 124, maxColorValue = 255),
+  rgb(170, 22, 82, maxColorValue = 255),
+  rgb(8, 99, 146, maxColorValue = 255),
+  rgb(29, 111, 184, maxColorValue = 255),
+  rgb(3, 156, 188, maxColorValue = 255),
+  rgb(96, 195, 226, maxColorValue = 255)
 )
 
 fmt <- function(x, n = 0) {
   x %>%
     round(n) %>%
     format(big.mark = " ", decimal.mark = ',', trim = TRUE)
+}
+
+fmt2 <- function(x, n = 1) {
+  (x / 1e6) %>%
+    round(n) %>%
+    format(decimal.mark = ",", big.mark = ' ', trim = TRUE)
 }
 ```
 
@@ -67,7 +86,7 @@ for (i in dir('data/')) {
 }
 ```
 
-### Barplot with totals
+### Stacked barplot with totals
 
 ```{r plot1, fig.align='center', fig.width=6}
 data_list$plot1 %>%
@@ -128,7 +147,7 @@ data_list$plot1 %>%
   )
 ```
 
-### Barplot with percentages
+### Dodged barplot with percentages
 
 ```{r plot2, fig.align='center', fig.width=5}
 data_list$plot2 %>%
@@ -220,7 +239,7 @@ data_list$plot2 %>%
   )
 ```
 
-### Plot
+### Lollipop plot with totals
 
 ```{r plot3, fig.align='center', fig.width=5, fig.height=5}
 data_list$plot3 %>%
@@ -236,11 +255,16 @@ data_list$plot3 %>%
       x = year,
       y = n)
   ) +
-  geom_line(data = tibble(
-      x = c(2013:2017 - .4, 2013:2017 + .4),
-      y = max(.$n) * 1.02,
-      gr = rep(1:5, 2)
-    ),
+  geom_line(
+    data = select(., year, n) %>%
+      transmute(
+        y = max(n) * 1.02,
+        x1 = year - .4,
+        x2 = year + .4
+      ) %>%
+      unique() %>%
+      mutate(gr = row_number()) %>%
+      gather('i', 'x', x1:x2),
     aes(
       x = x,
       y = y,
@@ -249,8 +273,8 @@ data_list$plot3 %>%
     color = colors[1]
   ) +
   geom_curve(data = tibble(
-      x = c(2013:2017 + .4, 2013:2017 - .45),
-      x2 = c(2013:2017 + .45, 2013:2017 - .4),
+      x = c(unique(.$year) + .4, unique(.$year) - .45),
+      x2 = c(unique(.$year) + .45, unique(.$year) - .4),
       y = rep(c(max(.$n) * 1.02, max(.$n) * 1.01), each = 5),
       y2 = rep(c(max(.$n) * 1.01, max(.$n) * 1.02), each =  5),
       gr = 1:10
@@ -271,7 +295,7 @@ data_list$plot3 %>%
     width = .1
   ) +
   geom_line(data = tibble(
-      x = c(2013:2017 - .45, 2013:2017 + .45),
+      x = c(unique(.$year) - .45, unique(.$year) + .45),
       y = 0,
       gr = rep(1:5, 2)
     ),
@@ -344,5 +368,890 @@ data_list$plot3 %>%
     legend.direction = 'horizontal'
   ) +
   ylim(c(.$year_pos[1] * 1.1, max(.$n) * 1.12))
+```
+
+### Point-line percentage plot
+
+```{r plot4, fig.align='center', fig.width=5, fig.height=3.5}
+data_list$plot4 %>%
+  gather('typ', 'wsp', -year) %>%
+  mutate(
+    wsp = as.numeric(wsp),
+    xpos = case_when(
+      typ == 'group 4' &
+        year %in% c(2012:2014, 2015, 2017) ~ year - .15,
+      typ == 'group 1' &
+        year %in% c(2012, 2014) ~ year + .15,
+      typ == 'group 5' &
+        year == 2013 ~ year + .15,
+      typ == 'group 5' &
+        year == 2017 ~ year + .28,
+      typ == 'group 2' &
+        year == 2015 ~ year + .15,
+      TRUE ~ year
+  )) %.>%
+  ggplot(
+    data = .,
+    aes(
+      x = xpos,
+      y = wsp,
+      color = typ,
+      fill = typ,
+      label = (wsp * 100) %>% round()
+  )) +
+  geom_line(
+    data = tibble(
+      x = c(unique(.$year)[-1] - .5) %>% rep(2),
+      y = min(.$wsp)
+    ) %>%
+      mutate(
+        y = c(min(y), Inf) %>% rep(each = length(x) / 2),
+        gr = 1:(length(x) / 2) %>% rep(2)
+      ),
+    aes(
+      x = x,
+      y = y,
+      group = gr
+    ),
+    color = colors[1],
+    alpha = .3,
+    linetype = 'dotted',
+    lwd = .2,
+    inherit.aes = FALSE
+  ) +
+  geom_line(
+    lwd = .5,
+    alpha = .5
+  ) +
+  geom_point(
+    size = 5,
+    shape = 21,
+    stroke = 0,
+    color = 'white'
+  ) +
+  geom_text(
+    family = 'Calibri',
+    color = 'white',
+    size = roz_cz_txt - .4
+  ) +
+  geom_shadowtext(aes(
+      label = '%',
+      x = xpos + .15
+    ),
+    family = 'Calibri',
+    size = roz_cz_txt - .4,
+    bg.color = 'white'
+  ) +
+  scale_x_continuous(breaks = unique(.$year)) +
+  scale_color_manual(values = colors[c(2, 4, 8, 7, 3)] %>% rev()) +
+  scale_fill_manual(values = colors[c(2, 4, 8, 7, 3)] %>% rev()) +
+  theme(
+    axis.text.y = element_blank(),
+    legend.position = c(.5, 1.02),
+    plot.margin = margin(20, 1, 1, 1),
+    legend.spacing.x = unit(1, 'mm'),
+    legend.direction = 'horizontal'
+  )
+```
+
+### Dodged barplot with counts and percentages
+
+```{r plot5, fig.align='center', fig.width=5, fig.height=4.5}
+data_list$plot5 %>%
+  mutate(
+    kategoria = kategoria %>% factor(levels = paste('category', c('A+', 'A', 'B', 'C'))),
+    wsp_pos = wsp * max(val) * 1.5 - max(val) * .8,
+    wsp_lab = wsp_pos - max(val) * .1,
+    txt_pos = if_else(
+      typ == 'mean number of accepted submissions per unit' &
+        kategoria == 'kategoria C',
+      val + max(val) * .07,
+      val + max(val) * .05
+    ),
+    typ2 = if_else(
+      typ == 'mean number of accepted submissions per unit',
+      'number of units',
+      'x')
+    ) %>% 
+  ggplot(aes(
+    x = kategoria,
+    y = val,
+    fill = typ %>% fct_rev(),
+    label = (val * 1e6) %>% fmt2()
+  )) +
+  geom_col(
+    position = 'dodge',
+    col = 'white'
+  ) +
+  geom_line(aes(
+      y = wsp_pos,
+      group = 1
+    ),
+    linetype = 'dotted',
+    color = colors[4],
+    lwd = .4
+  ) +
+  geom_point(aes(
+      y = val / 2,
+      col = typ2 %>% fct_rev()
+    ),
+    position = position_dodge(.9),
+    shape = 21,
+    fill = 'white',
+    size = 6.5
+  ) +
+  geom_text(aes(
+      y = val / 2,
+      label = n
+    ),
+    position = position_dodge(.9),
+    family = 'Calibri',
+    size = roz_cz_txt - .6
+  ) +
+  geom_point(aes(
+      y = wsp_pos,
+      shape = 'success rate'
+    ),
+    size = 6,
+    stroke = 0,
+    fill = colors[4],
+    color = 'white'
+  ) +
+  geom_text(
+    aes(y = txt_pos),
+    position = position_dodge(.9),
+    family = 'Calibri',
+    size = roz_cz_txt
+  ) +
+  geom_text(aes(
+      y = wsp_pos,
+      label = (wsp * 100) %>%
+        round()
+    ),
+    family = 'Calibri',
+    size = roz_cz_txt,
+    color = 'white'
+  ) +
+  geom_shadowtext(aes(
+      y = wsp_pos,
+      label = '%'
+    ),
+    size = roz_cz_txt,
+    family = 'Calibri',
+    nudge_x = .13,
+    color = colors[4],
+    bg.color = 'white'
+  ) +
+  scale_fill_manual(values = colors[c(6, 8)]) +
+  scale_color_manual(
+    breaks = 'number of units',
+    values = colors[c(6, 8)]
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(size = 3.3),
+      label.position = 'left'
+    ),
+    fill = guide_legend(
+      label.position = 'left',
+      reverse = TRUE
+    ),
+    shape = guide_legend(
+      override.aes = list(size = 4),
+      label.position = 'left')
+  ) +
+  scale_shape_manual(values = 21) +
+  theme(
+    axis.text.y = element_blank(),
+    legend.margin = margin(0, 0, 0, 0),
+    legend.spacing.y = unit(0, 'mm'),
+    legend.direction = 'vertical',
+    legend.box = 'vertical',
+    axis.text.x = element_text(vjust = 48),
+    legend.key.size = unit(leg_sq, 'lines'),
+    legend.box.just = 'right',
+    legend.position = c(.67, .85)
+  )
+```
+
+### Facet dodged barplot with percentages
+
+```{r plot6, fig.align='center', fig.width=5, fig.height=7}
+legend <-
+  tibble(
+    obsz = c(rep("2", 12), rep("1", 6)),
+    rok = rep("2018", 18),
+    zl = c(rep(1, 6), rep(2, 6), rep(3, 6)),
+    fin = rep(1:6, 3),
+    wsp = c(rep(1, 6), rep(2, 6), rep(1, 6)),
+    lab_pos = c(rep(-50, 6), rep(1750, 6), rep(950, 6)),
+    wsp_pos = c(
+      seq(-500, -100, length.out = 6),
+      seq(1300, 1700, length.out = 6),
+      seq(500, 900, length.out = 6)
+    ),
+    rok_pos = rep(NA, 18),
+    wsp_lab = c(
+      rep("number of accepted projects", 6),
+      rep("number of submitted projects", 6),
+      rep("% success rate", 6)
+    ))
+
+data_list$plot6a %>% 
+  gather(rok, val, -obsz) %>%
+  left_join(
+    data_list$plot6b %>%
+      gather(rok, val, -obsz),
+    by = c('obsz', 'rok')
+  ) %>%
+  rename_at(3:4, ~ c('zl', 'fin')) %>%
+  mutate(
+    wsp = fin / zl,
+    lab_pos = zl - max(zl) * .03,
+    wsp_pos = wsp * 2e3 + max(zl) * .92,
+    rok_pos = -max(wsp_pos) * .25,
+    wsp_lab = (wsp * 100) %>% round() %>% as.character(),
+    obsz = obsz %>%
+      factor(levels = c(
+        '1',
+        '2',
+        'group 1',
+        'group 2',
+        'group 3',
+        'group 4',
+        'group 5',
+        'group 6',
+        'group 7'
+      ) %>% rev()
+    ),
+    rok = rok %>% factor(levels = 2012:2018)) %>%
+  ggplot(aes(
+    x = obsz,
+    y = zl,
+    fill = rok,
+    color = rok,
+    label = zl)
+  ) +
+  geom_segment(aes(
+      xend = obsz,
+      y = zl,
+      yend = wsp_pos
+    ),
+    linetype = 3,
+    alpha = .5
+  ) +
+  geom_col(
+    position = position_dodge(.9),
+    alpha = .6,
+    col = 'white'
+  ) +
+  geom_col(aes(
+      y = fin,
+      color = NULL
+    ),
+    width = .7
+  ) +
+  geom_text(aes(
+      y = fin / 2,
+      label = fin
+    ),
+    color = 'white',
+    size = roz_cz_txt - 1
+  ) +
+  geom_point(
+    aes(y = wsp_pos),
+    shape = 21,
+    size = 4.4,
+    color = 'white'
+  ) +
+  geom_text(aes(
+      y = wsp_pos,
+      label = wsp_lab
+    ),
+    color = 'white',
+    size = roz_cz_txt - .8,
+    family = 'Calibri'
+  ) +
+  geom_point(aes(
+      x = 'group 4',
+      y = rok_pos
+    ),
+    size = 14
+  ) +
+  geom_text(aes(
+      x = 'group 4',
+      y = rok_pos,
+      label = rok
+    ),
+    family = 'Calibri',
+    color = 'white',
+    size = 4.5,
+    check_overlap = TRUE
+  ) +
+  geom_label(
+    aes(y = lab_pos),
+    family = 'Calibri',
+    color = colors[1],
+    fill = 'white',
+    label.r = unit(0, 'lines'),
+    label.padding = unit(0.1, 'lines'),
+    label.size = .2,
+    size = roz_cz_txt - .8
+  ) +
+  geom_text(aes(
+      y = -70,
+      label = obsz
+    ),
+    size = roz_cz_txt,
+    color = rgb(59, 58, 60, maxColorValue = 255),
+    hjust = 1,
+    family = 'Calibri',
+    check_overlap = TRUE
+  ) +
+  geom_text(aes(
+      y = wsp_pos + max(wsp_pos) * .02,
+      label = '%'
+    ),
+    family = 'Calibri',
+    hjust = 0,
+    size = roz_cz_txt - .3
+  ) +
+  geom_point(
+    data = legend,
+    aes(
+      y = wsp_pos,
+      shape = factor(zl),
+      color = factor(fin),
+      alpha = factor(wsp)
+    ),
+    size = 2.2
+  ) +
+  geom_text(
+    data = legend,
+    aes(
+      y = lab_pos,
+      label = wsp_lab
+    ),
+    family = 'Calibri',
+    size = roz_cz_txt - .5,
+    color = rgb(59, 58, 60, maxColorValue = 255),
+    check_overlap = TRUE,
+    hjust = 0
+  ) +
+  coord_flip() +
+  facet_grid(
+    rok %>% fct_rev() ~ .,
+    scales = 'free',
+    space = 'free'
+  ) +
+  scale_shape_manual(values = c(15, 15, 16)) +
+  scale_alpha_manual(values = c(1, .6)) +
+  scale_fill_manual(values = colors[c(4, 3, 7, 8, 6, 9, 4, 3, 5, 8, 9, 7)] %>% rev()) +
+  scale_color_manual(values = colors[c(7, 8, 6, 9, 4, 3, 5, 8, 9, 7, 4, 3)] %>% rev()) +
+  theme(
+    legend.position = 'none',
+    axis.text = element_blank(),
+    strip.text = element_blank()
+  )
+```
+
+### Bubble map
+
+```{r map1, warning=FALSE, message=FALSE, fig.align='center', fig.width=5.5, fig.height=5}
+woj <-
+  readOGR("maps/województwa.shp", "województwa") %>%
+  spTransform(CRS("+init=epsg:4326"))
+
+woj_naz <-
+  coordinates(woj) %>%
+  as_tibble() %>%
+  set_names(c("long", "lat")) %>%
+  mutate(
+    województwo = woj@data$jpt_nazwa_,
+    id = as.character(0:15)
+  )
+
+woj_df <-
+  tidy(woj) %>%
+  left_join(
+    woj_naz %>%
+      select(id, województwo)
+  )
+
+spc <- .15
+
+dane_art <-
+  data_list$map1 %>%
+  group_by(typ) %>%
+  summarise_at(2:17, sum) %>% 
+  gather(wjw, n, -typ) %>%
+  filter(!typ %like% 'Articl.*') %>%
+  group_by(wjw) %>%
+  mutate(sum = sum(n)) %>%
+  left_join(woj_naz, c('wjw' = 'województwo')) %>%
+  group_by(wjw) %>%
+  mutate(
+    typ = typ %>% fct_relevel('Article', after = Inf),
+    lat = case_when(
+      wjw == 'pomorskie' ~ lat + .11,
+      wjw == 'wielkopolskie' ~ lat - .12,
+      wjw == 'kujawsko-pomorskie' ~ lat + .05,
+      wjw == 'opolskie' ~ lat + .07,
+      wjw == 'dolnoslaskie' ~ lat + .07,
+      TRUE ~ lat
+    ),
+    long = case_when(
+      wjw == 'zachodniopomorskie' ~ long - .2,
+      wjw == 'warminsko-mazurskie' ~ long - .2,
+      wjw == 'kujawsko-pomorskie' ~ long - .4,
+      wjw == 'swietokrzyskie' ~ long - .09,
+      wjw == 'slaskie' ~ long - .07,
+      TRUE ~ long
+    ),
+    lat_p = case_when(
+      typ == 'Arti' ~ lat + spc / .8,
+      typ == 'Book' ~ lat - spc / .8,
+      TRUE ~ lat
+    ) %>% `-`(.2)
+  )
+
+woj_df %>%
+  ggplot(aes(
+    x = long,
+    y = lat,
+    group = group
+  )) +
+  geom_polygon(
+    fill = 'white',
+    col = colors[2] %>% alpha(.6),
+    size = .2
+  ) +
+  geom_point(
+    data = dane_art,
+    aes(
+      x = long - .2,
+      y = lat_p + .05,
+      size = n,
+      color = typ,
+      group = NULL
+    ),
+    alpha = .6
+  ) +
+  geom_text(
+    data = dane_art,
+    aes(
+      y = lat_p + .05,
+      label = n %>% fmt(),
+      group = NULL
+    ),
+    family = 'Calibri',
+    size = 2.5,
+    hjust = 0,
+    color = rgb(.2, .2, .2)
+  ) +
+  geom_text(
+    data = dane_art,
+    aes(
+      x = long - .3,
+      y = lat + .22,
+      label = wjw,
+      group = NULL
+    ),
+    family = 'Calibri',
+    size = 2.5,
+    hjust = 0,
+    color = rgb(.2, .2, .2),
+    check_overlap = TRUE
+  ) +
+  scale_size_area(trans = 'sqrt', max_size = 4.5) +
+  scale_color_manual(
+    values = colors[c(3, 5, 4)],
+    labels = c(
+      'category 1',
+      'category 2',
+      'category 3'
+  )) +
+  guides(
+    size = FALSE,
+    color = guide_legend(override.aes = list(
+      size = 4,
+      color = colors[3:5]
+  ))) +
+  theme_map() +
+  theme(
+    legend.title = element_blank(),
+    legend.position = c(.1, .05),
+    legend.background = element_rect(color = 'transparent', fill = 'transparent')
+  )
+```
+
+### Waffle map
+
+```{r map2, warning=FALSE, message=FALSE, fig.align='center', fig.width=5.5, fig.height=5}
+woj_sum <-
+  woj_naz %>%
+  left_join(data_list$map2)
+
+n_row <- 6
+
+main <-
+  woj_df %>%
+  ggplot(aes(
+    x = long,
+    y = lat,
+    group = group
+  )) +
+  geom_polygon(
+    fill = 'white',
+    col = colors[2],
+    size = .2
+  ) +
+  geom_text(
+    data = woj_sum,
+    aes(label = województwo, group = NULL),
+    nudge_y = .14,
+    size = roz_cz_txt - .4,
+    family = 'Calibri'
+  ) +
+  geom_text(
+    data = woj_sum,
+    aes(label = total, group = NULL),
+    nudge_y = .29,
+    size = roz_cz_txt,
+    family = 'Calibri'
+  ) +
+  theme_void() +
+  xlim(c(13.8, 24.2))
+
+subplot <-
+  woj_sum %>%
+  mutate(mar = total / n_row) %>%
+  select(-c(województwo, total, id)) %>%
+  pmap(function(
+    `group 1`,
+    `group 2`,
+    `group 3`,
+    long,
+    lat,
+    mar
+    ) {
+    annotation_custom(
+      ggplotGrob(
+        waffle(
+          c(`group 1`,
+            `group 2`,
+            `group 3`),
+          legend_pos = 'none',          
+          size = .3,
+          rows = n_row,
+          colors = colors[c(9, 6, 4)]
+        )
+      ),
+      xmin = long - mar,
+      xmax = long + mar,
+      ymin = lat - .28 - .13,
+      ymax = lat + .28 - .13)
+  })
+
+main + subplot +
+  annotation_custom(
+    ggplotGrob(
+      waffle(
+        c(`1 unit of type 1` = 0,
+          `1 unit of type 2` = 0,
+          `1 unit of type 3` = 1),
+        legend_pos = 'bottom',
+        colors = colors[c(9, 6, 4)]) +
+        theme(legend.text = element_text(
+          family = 'Calibri',
+          size = roz_cz - .5
+        )) +
+        guides(fill = guide_legend(
+          keywidth = leg_sq,
+          keyheight = leg_sq
+        ))),
+    ymin = 54.7
+  )
+```
+
+### Difference plot
+
+```{r plot7, fig.align='center', fig.width=5, fig.height=6}
+data_list$plot7 %>%
+  slice(-1) %>%
+  mutate(
+    województwo = reorder(województwo, received),
+    clr = received > lost,
+    poz_pos = if_else(
+      received > lost,
+      received + 1e3,
+      received - 1e3
+    ),
+    utr_pos = if_else(
+      received < lost,
+      lost + 1e3,
+      lost - 1e3)
+  ) %>%
+  gather(poz_utr, n, c(received, lost)) %>%
+  mutate(txt_pos = if_else(
+    poz_utr == 'received',
+    poz_pos,
+    utr_pos
+  )) %.>%
+  ggplot(
+    data = .,
+    aes(
+      x = województwo,
+      y = n,
+      color = poz_utr,
+      label = n %>% fmt()
+  )) +
+  geom_segment(
+    data = . %>% select(województwo, poz_utr, n) %>%
+      spread(poz_utr, n),
+    aes(
+      xend = województwo,
+      y = received,
+      yend = lost,
+      color = NULL,
+      label = NULL
+    ),
+    color = 'grey'
+  ) +
+  geom_point() +
+  geom_text(
+    aes(y = txt_pos),
+    size = roz_cz_txt,
+    family = 'Calibri',
+    show.legend = FALSE
+  ) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = 'top',
+    axis.text.x = element_blank()
+  ) +
+  scale_fill_manual(values = colors[c(10, 11)]) +
+  ylim(c(-1100, 13000)) +
+  coord_flip() +
+  guides(fill = guide_legend(
+    keywidth = leg_sq,
+    keyheight = leg_sq,
+    reverse = TRUE
+  )) +
+  scale_color_manual(values = colors[c(10, 11)])
+```
+
+### Wordl map with arrows
+
+```{r map3, warning=FALSE, message=FALSE, fig.align='center', fig.width=5.5, fig.height=5}
+wrld <- rgdal::readOGR('maps/TM_WORLD_BORDERS-0.3.shp', 'TM_WORLD_BORDERS-0.3')
+
+grat <-
+  readOGR('maps/ne_110m_graticules_30.shp', 'ne_110m_graticules_30') %>%
+  spTransform(CRS('+proj=robin')) %>%
+  fortify()
+
+dane <- 
+  data_list$map3 %>%
+  mutate(bins = as.factor(bins))
+
+wrld_center <-
+  wrld %>%
+  spTransform(CRS('+proj=robin')) %>%
+  coordinates() %>%
+  as_tibble() %>%
+  set_names(c('long', 'lat')) %>%
+  mutate(cntr_id = wrld@data$NAME) %>%
+  left_join(dane, by = c('cntr_id' = 'dest')) %>%
+  mutate(
+    long_ = if_else(cntr_id == 'Poland', long, NA_real_),
+    lat_ = if_else(cntr_id == 'Poland', lat, NA_real_),
+    size = case_when(
+      bins == levels(bins)[1] ~ .2,
+      bins == levels(bins)[2] ~ .4,
+      TRUE ~ .6)) %>%
+  fill(long_, lat_, .direction = 'up') %>%
+  fill(long_, lat_, .direction = 'down') %>%
+  filter(!is.na(bins))
+
+eur_center <-
+  wrld %>%
+  spTransform(CRS('+init=epsg:4326')) %>%
+  coordinates() %>%
+  as_tibble() %>%
+  set_names(c('long', 'lat')) %>%
+  mutate(
+    cntr_id = wrld@data$NAME,
+    long = case_when(
+      cntr_id == 'Norway' ~ long - 4,
+      cntr_id == 'Sweden' ~ long - 2,
+      cntr_id == 'United Kingdom' ~ long + 1,
+      TRUE ~ long
+    ),
+    lat = case_when(
+      cntr_id == 'Norway' ~ lat - 3,
+      cntr_id == 'Finland' ~ lat - 2,
+      TRUE ~ lat
+    )) %>%
+  left_join(dane, by = c('cntr_id' = 'dest')) %>%
+  mutate(
+    long_ = if_else(cntr_id == 'Poland', long, NA_real_),
+    lat_ = if_else(cntr_id == 'Poland', lat, NA_real_)
+  ) %>%
+  fill(long_, lat_, .direction = 'up') %>%
+  fill(long_, lat_, .direction = 'down') %>%
+  filter(!is.na(n)) %>%
+  filter(long %>% between(-24, 36),
+         lat %>% between(36, 67))
+
+clean_map <- function(shp, proj, dane) {
+  shp %>%
+    spTransform(CRS(proj)) %>%
+    rmapshaper::ms_simplify(keep = .1) %>%
+    tidy(region = 'NAME') %>%
+    left_join(
+      dane %>% select(dest, n, bins),
+      by = c('id' = 'dest')
+    ) %>%
+    mutate(clr = if_else(id == 'Poland', 0, n))
+}
+
+wrld_epg <-
+  wrld %>%
+  clean_map('+init=epsg:4326', dane)
+
+wrld_rob <-
+  wrld %>%
+  clean_map('+proj=robin', dane)
+
+wrld_rob %>%
+  filter(lat > -6e6) %.>%
+  ggplot(
+    data = .,
+    aes(
+      x = long,
+      y = lat
+  )) +
+  geom_path(
+    data = grat,
+    aes(group = group),
+    linetype = 'dotted',
+    color = 'steelblue',
+    alpha = .3
+  ) +
+  geom_polygon(aes(
+      group = group,
+      fill = clr
+    ),
+    col = 'steelblue',
+    size = .00001,
+    show.legend = FALSE
+  ) +
+  geom_curve(
+    data = wrld_center %>%
+      filter(long >= 1567190),
+    aes(
+      x = long_,
+      y = lat_,
+      xend = long,
+      yend = lat,
+      size = bins,
+      color = bins
+    ),
+    curvature = -.3,
+    arrow = arrow(type = 'closed', angle = 20, length = unit(1, 'mm')),
+    alpha = .8
+  ) +
+  geom_curve(
+    data = wrld_center %>% filter(long < 1567190),
+    aes(
+      x = long_,
+      y = lat_,
+      xend = long,
+      yend = lat,
+      size = bins,
+      color = bins
+    ),
+    curvature = .3,
+    arrow = arrow(type = 'closed', angle = 20, length = unit(1, 'mm')),
+    alpha = .8
+  ) +
+  theme_map() +
+  theme(
+    legend.position = c(.37, -.22),
+    legend.title = element_blank(),
+    legend.text = element_text(family = 'Calibri'),
+    legend.text.align = 1,
+    legend.margin = margin(0, 0, 0, 0)
+  ) +
+  scale_color_manual(values = colors[c(12, 15, 13, 14)]) +
+  scale_fill_gradient(
+    low = rgb(.9, .9, .9),
+    high = colors[2],
+    na.value = 'white'
+  ) +
+  scale_size_manual(
+    values = c(.4, .7, .1, 1.1) %>% rev(),
+    labels = c(' 1 - 100', ' 101 - 1000', ' 1001 - 5000', ' > 5000')
+  ) +
+  guides(size = guide_legend(
+    override.aes = list(
+      color = colors[c(12, 15, 13, 14)],
+      size = c(1.1, .7, .4, .1) %>% rev())
+  ),
+  color = FALSE) +
+  coord_equal() +
+  theme(legend.text.align = 0) +
+  annotation_custom(ggplotGrob(
+    ggplot(
+      data = subset(wrld_epg, long > -100),
+      aes(
+        x = long,
+        y = lat
+      )) +
+      geom_polygon(aes(
+          group = group,
+          fill = clr
+        ),
+        col = 'steelblue',
+        size = .00001,
+        alpha  = .8
+      ) +
+      geom_segment(
+        data = eur_center,
+        aes(
+          x = long_,
+          y = lat_,
+          xend = long,
+          yend = lat,
+          size = bins,
+          color = bins
+        ),
+        arrow = arrow(type = 'closed', angle = 20, length = unit(1, 'mm')),
+        alpha = .8
+      ) +
+      coord_map(
+        xlim = c(-24, 36),
+        ylim = c(36, 67)
+      ) +
+      theme_map() +
+      theme(
+        legend.position = 'none',
+        panel.border = element_rect(color = 'steelblue', fill = NA),
+        panel.background = element_rect(color = 'white'),
+        plot.margin = margin(0, 0, 0, 0)
+      ) +
+      scale_color_manual(values = colors[c(12, 15, 13, 14)]) +
+      scale_fill_gradient(
+        low = rgb(.9, .9, .9),
+        high = colors[2],
+        na.value = 'white'
+      ) +
+      scale_size_manual(values = c(1.1, .7, .4, .1) %>% rev())),
+    xmin = -2e6,
+    xmax = 14e6,
+    ymin = -14e6,
+    ymax = -40e5
+  )
 ```
 
