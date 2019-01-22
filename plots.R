@@ -1,12 +1,16 @@
-# biblioteki -----------------------------
+# libraries --------------------------------------------------------------------
 
 library(shadowtext)
+library(DescTools)
 library(tidyverse)
 library(lubridate)
+library(ggthemes)
+library(broom)
 library(wrapr)
-library(grid)
+library(rgdal)
+library(waffle)
 
-# settings -------------------------------
+# settings ---------------------------------------------------------------------
 
 extrafont::loadfonts(device = 'win')
 
@@ -21,7 +25,8 @@ theme_set(
     text = element_text(size = roz_cz),
     axis.title.x = element_blank(),
     axis.title.y = element_blank(),
-    legend.position = "top",
+    legend.position = 'top',
+    legend.direction = 'horizontal',
     legend.title = element_blank()
   )
 )
@@ -37,7 +42,11 @@ colors <- c(
   rgb(40, 50, 90, maxColorValue = 255),
   rgb(82, 104, 165, maxColorValue = 255),
   rgb(0, 115, 124, maxColorValue = 255),
-  rgb(170, 22, 82, maxColorValue = 255)
+  rgb(170, 22, 82, maxColorValue = 255),
+  rgb(8, 99, 146, maxColorValue = 255),
+  rgb(29, 111, 184, maxColorValue = 255),
+  rgb(3, 156, 188, maxColorValue = 255),
+  rgb(96, 195, 226, maxColorValue = 255)
 )
 
 fmt <- function(x, n = 0) {
@@ -52,7 +61,7 @@ fmt2 <- function(x, n = 1) {
     format(decimal.mark = ",", big.mark = ' ', trim = TRUE)
 }
   
-# read-in the data -----------------------
+# read-in the data -------------------------------------------------------------
 
 data_list <- list()
 
@@ -60,14 +69,14 @@ for (i in dir('data/')) {
   data_list[[str_remove(i, '\\..*$')]] <- read_csv2(paste0('data/', i))
 }
 
-# W 2.27. Wysokość dotacji celowej w latach 2013–2017: OSF ----
+# Stacked barplot with totals --------------------------------------------------
 
-data_list$osf_2_27 %>%
-  gather(typ, n, 2:4) %>%
+data_list$plot1 %>%
+  gather(type, n, 2:4) %>%
   ggplot(aes(
-    x = rok,
+    x = year,
     y = n,
-    fill = typ,
+    fill = type,
     label = n %>% fmt()
   )) +
   geom_col(col = 'white') +
@@ -78,29 +87,29 @@ data_list$osf_2_27 %>%
     color = 'white'
   ) +
   geom_label(aes(
-    y = razem + max(razem) * .06,
-    label = razem %>% fmt()),
-    family = "Calibri",
+    y = total + max(total) * .06,
+    label = total %>% fmt()),
+    family = 'Calibri',
     size = roz_cz_txt,
-    fill = "white",
-    color = podstawowy,
-    label.padding = unit(0.1, "lines"),
+    fill = 'white',
+    color = colors[1],
+    label.padding = unit(0.1, 'lines'),
     show.legend = FALSE
   ) +
   geom_label(aes(
-    x = 2013.435,
-    y = 455,
+    x = 2015.78,
+    y = 500,
     label = '    '
   ),
   size = 2.5,
-  fill = "white",
-  color = podstawowy,
-  label.padding = unit(0.1, "lines")
+  fill = 'white',
+  color = colors[1],
+  label.padding = unit(0.1, 'lines')
   ) +
   geom_text(aes(
-    x = 2013.57,
-    y = 455,
-    label = 'ogółem'
+    x = 2015.88,
+    y = 500,
+    label = 'total'
   ),
   family = 'Calibri',
   size = roz_cz_txt,
@@ -111,33 +120,32 @@ data_list$osf_2_27 %>%
     keyheight = .8,
     keywidth = .8
   )) +
-  scale_fill_manual(values = paleta_ald[c(2, 1, 6)]) +
+  scale_fill_manual(values = colors[c(4, 3, 8)]) +
   theme(
     axis.text.y = element_blank(),
     legend.spacing.x = unit(1, 'mm'),
-    legend.position = c(.5, 1.08),
+    legend.position = c(.45, .956),
     plot.margin = margin(40, 5, 5, 5)
   )
 
 ggsave(
-  filename = 'wykresy/w2_27_v1.png',
+  filename = 'plots/plot1.png',
   units = 'cm',
-  width = 13,
+  width = 15,
   height = 8.7,
-  bg = 'transparent',
-  dpi = 400
+  bg = 'white',
+  dpi = 600
 )
 
-# W 3.4. Liczba wniosków złożonych i projektów finansowanych w konkursach NCN w 2017 roku w podziale na województwa ----
+# Dodged barplot with percentages ----------------------------------------------
 
-data_list$ncn_3_4 %>%
-  filter(rok == 2017) %>% 
+data_list$plot2 %>%
+  filter(year == 2017) %>% 
   select(-1) %>%
-  gather(woj, n, -typ) %>%
-  spread(typ, n) %>%
-  rename_at(2:3, ~c('finansowane projekty', 'złożone wnioski')) %>%
-  mutate(wsp = `finansowane projekty` / `złożone wnioski`) %>%
-  gather(typ, n, c(`finansowane projekty`, `złożone wnioski`)) %>%
+  gather(woj, n, -type) %>%
+  spread(type, n) %>%
+  mutate(wsp = accepted / submitted) %>%
+  gather(type, n, c(accepted, submitted)) %>%
   mutate(
     wsp_pos = wsp * max(n) + max(n) * 1.2,
     wsp_lab = wsp_pos * 1.07,         
@@ -148,7 +156,7 @@ data_list$ncn_3_4 %>%
     aes(
       x = woj %>% fct_rev(),
       y = n,
-      fill = typ,
+      fill = type,
       label = n %>% fmt()
   )) +
   geom_segment(aes(
@@ -173,7 +181,7 @@ data_list$ncn_3_4 %>%
   ) +
   geom_point(aes(
       y = wsp_pos,
-      shape = 'współczynnik sukcesu'
+      shape = 'success rate'
     ),
     fill = colors[4],
     size = 6,
@@ -195,7 +203,7 @@ data_list$ncn_3_4 %>%
     ),
     family = 'Calibri',
     nudge_y = 170,
-    color = paleta_ald[2],
+    color = colors[4],
     size = roz_cz_txt,
     show.legend = FALSE
   ) +
@@ -212,7 +220,7 @@ data_list$ncn_3_4 %>%
     axis.text.x = element_blank(),
     plot.margin = margin(t = 60),
     legend.position = c(.412, 1.09),
-    legend.direction = 'vertical',
+    legend.direction = 'horizontal',
     legend.box = 'horizontal',
     legend.spacing.x = unit(1, 'mm'),
     legend.box.just = 'left',
@@ -220,15 +228,15 @@ data_list$ncn_3_4 %>%
   )
 
 ggsave(
-  filename = 'wykresy/w3_4_v1.png',
+  filename = 'plots/plot2.png',
   units = 'cm',
   width = 13,
   height = 12,
-  bg = 'transparent',
+  bg = 'white',
   dpi = 600
 )
 
-# W 3.7. Liczba wniosków złożonych w konkursach NCN w latach 2013–2017 w podziale na typy wnioskodawców ----
+# Lollipop plot with totals ----------------------------------------------------
 
 data_list$plot3 %>%
   mutate(total = rowSums(.[2:6])) %>%
@@ -359,15 +367,15 @@ data_list$plot3 %>%
 
 
 ggsave(
-  filename = 'wykresy/w3_7_v4.png',
+  filename = 'plots/plot3.png',
   units = 'cm',
   width = 13,
   height = 14,
-  bg = 'transparent',
+  bg = 'white',
   dpi = 600
 )
 
-# W 3.10. Współczynnik sukcesu wniosków w konkursach NCN w latach 2013–2017 w podziale na typy wnioskodawców ----
+# Point-line percentage plot ---------------------------------------------------
 
 data_list$plot4 %>%
   gather('typ', 'wsp', -year) %>%
@@ -450,15 +458,15 @@ data_list$plot4 %>%
   )
 
 ggsave(
-  filename = 'wykresy/w3_10_v4.png',
+  filename = 'plots/plot4.png',
   units = 'cm',
   width = 13,
   height = 10,
-  bg = 'transparent',
+  bg = 'white',
   dpi = 600
 )
 
-# W 3.15. Średnia liczba złożonych wniosków i projektów finansowanych przez NCN na jednostkę w 2017 roku w podziale na kategorie naukowe jednostek naukowych ----
+# Dodged barplot with counts and percentages -----------------------------------
 
 data_list$plot5 %>%
   mutate(
@@ -570,28 +578,28 @@ data_list$plot5 %>%
     legend.spacing.y = unit(0, 'mm'),
     legend.direction = 'vertical',
     legend.box = 'vertical',
-    axis.text.x = element_text(vjust = 43.5),
+    axis.text.x = element_text(vjust = 48),
     legend.key.size = unit(leg_sq, 'lines'),
     legend.box.just = 'right',
-    legend.position = c(.62, .85)
+    legend.position = c(.68, .85)
   )
 
 ggsave(
-  filename = 'wykresy/w3_15_1.png',
+  filename = 'plots/plot5.png',
   units = 'cm',
   width = 13,
-  height = 10,
-  bg = 'transparent',
+  height = 12,
+  bg = 'white',
   dpi = 600
 )
 
-# W 3.20 i 3.21 i 3.22 ----
+# Facet dodged barplot with percentages ----------------------------------------
 
 legend <-
   tibble(
     obsz = c(rep("2", 12), rep("1", 6)),
     rok = rep("2018", 18),
-    zł = c(rep(1, 6), rep(2, 6), rep(3, 6)),
+    zl = c(rep(1, 6), rep(2, 6), rep(3, 6)),
     fin = rep(1:6, 3),
     wsp = c(rep(1, 6), rep(2, 6), rep(1, 6)),
     lab_pos = c(rep(-50, 6), rep(1750, 6), rep(950, 6)),
@@ -602,9 +610,9 @@ legend <-
     ),
     rok_pos = rep(NA, 18),
     wsp_lab = c(
-      rep("liczba projektów finansowanych", 6),
-      rep("liczba wniosków złożonych", 6),
-      rep("% współczynnik sukcesu", 6)
+      rep("number of accepted projects", 6),
+      rep("number of submitted projects", 6),
+      rep("% success rate", 6)
     ))
 
 data_list$plot6a %>% 
@@ -614,12 +622,12 @@ data_list$plot6a %>%
       gather(rok, val, -obsz),
     by = c('obsz', 'rok')
   ) %>%
-  rename_at(3:4, ~ c('zł', 'fin')) %>%
+  rename_at(3:4, ~ c('zl', 'fin')) %>%
   mutate(
-    wsp = fin / zł,
-    lab_pos = zł - max(zł) * .03,
-    wsp_pos = wsp * 2e3 + max(zł) * .92,
-    rok_pos = -max(wsp_pos) * .3,
+    wsp = fin / zl,
+    lab_pos = zl - max(zl) * .03,
+    wsp_pos = wsp * 2e3 + max(zl) * .92,
+    rok_pos = -max(wsp_pos) * .25,
     wsp_lab = (wsp * 100) %>% round() %>% as.character(),
     obsz = obsz %>%
       factor(levels = c(
@@ -637,14 +645,14 @@ data_list$plot6a %>%
     rok = rok %>% factor(levels = 2012:2018)) %>%
   ggplot(aes(
     x = obsz,
-    y = zł,
+    y = zl,
     fill = rok,
     color = rok,
-    label = zł)
+    label = zl)
   ) +
   geom_segment(aes(
       xend = obsz,
-      y = zł,
+      y = zl,
       yend = wsp_pos
     ),
     linetype = 3,
@@ -730,7 +738,7 @@ data_list$plot6a %>%
     data = legend,
     aes(
       y = wsp_pos,
-      shape = factor(zł),
+      shape = factor(zl),
       color = factor(fin),
       alpha = factor(wsp)
     ),
@@ -765,15 +773,15 @@ data_list$plot6a %>%
   )
 
 ggsave(
-  filename = 'wykresy/w3_20_v2.png',
+  filename = 'plots/plot6.png',
   units = 'cm',
   width = 13.5,
   height = 15,
-  bg = 'transparent',
+  bg = 'white',
   dpi = 600
 )
 
-# R 5.X2. Liczba publikacji naukowych przypadających w podziale na województwa ----
+# Bubble map -------------------------------------------------------------------
 
 woj <-
   readOGR("maps/województwa.shp", "województwa") %>%
@@ -814,15 +822,15 @@ dane_art <-
       wjw == 'wielkopolskie' ~ lat - .12,
       wjw == 'kujawsko-pomorskie' ~ lat + .05,
       wjw == 'opolskie' ~ lat + .07,
-      wjw == 'dolnośląskie' ~ lat + .07,
+      wjw == 'dolnoslaskie' ~ lat + .07,
       TRUE ~ lat
     ),
     long = case_when(
       wjw == 'zachodniopomorskie' ~ long - .2,
-      wjw == 'warmińsko-mazurskie' ~ long - .2,
+      wjw == 'warminsko-mazurskie' ~ long - .2,
       wjw == 'kujawsko-pomorskie' ~ long - .4,
-      wjw == 'świętokrzyskie' ~ long - .09,
-      wjw == 'śląskie' ~ long - .07,
+      wjw == 'swietokrzyskie' ~ long - .09,
+      wjw == 'slaskie' ~ long - .07,
       TRUE ~ long
     ),
     lat_p = case_when(
@@ -839,7 +847,7 @@ woj_df %>%
     group = group
   )) +
   geom_polygon(
-    fill = "white",
+    fill = 'white',
     col = colors[2] %>% alpha(.6),
     size = .2
   ) +
@@ -875,12 +883,12 @@ woj_df %>%
       group = NULL
     ),
     family = 'Calibri',
-    size = 3,
+    size = 2.5,
     hjust = 0,
     color = rgb(.2, .2, .2),
     check_overlap = TRUE
   ) +
-  scale_size_area(trans = 'sqrt') +
+  scale_size_area(trans = 'sqrt', max_size = 4.5) +
   scale_color_manual(
     values = colors[c(3, 5, 4)],
     labels = c(
@@ -902,16 +910,35 @@ woj_df %>%
   )
 
 ggsave(
-  filename = 'wykresy/R5_X2_v1.png',
+  filename = 'plots/map1.png',
   units = 'cm',
-  width = 13 * 1.4,
-  height = 12 * 1.4,
-  bg = 'transparent',
-  dpi = 400
+  width = 13 * 1.2,
+  height = 12 * 1.2,
+  bg = 'white',
+  dpi = 600
 )
 
-# R 1.1. Liczba uczelni publicznych, niepublicznych i kościelnych w 2017 roku według województw ----
+# Waffle map -------------------------------------------------------------------
 
+woj <-
+  readOGR("maps/województwa.shp", "województwa") %>%
+  spTransform(CRS("+init=epsg:4326"))
+
+woj_naz <-
+  coordinates(woj) %>%
+  as_tibble() %>%
+  set_names(c("long", "lat")) %>%
+  mutate(
+    województwo = woj@data$jpt_nazwa_,
+    id = as.character(0:15)
+  )
+
+woj_df <-
+  tidy(woj) %>%
+  left_join(
+    woj_naz %>%
+      select(id, województwo)
+  )
 
 woj_sum <-
   woj_naz %>%
@@ -982,14 +1009,14 @@ main + subplot +
   annotation_custom(
     ggplotGrob(
       waffle(
-        c(`1 unit of group 1` = 0,
-          `1 unit of group 2` = 0,
-          `1 unit of group 3` = 1),
+        c(`1 unit of type 1` = 0,
+          `1 unit of type 2` = 0,
+          `1 unit of type 3` = 1),
         legend_pos = 'bottom',
         colors = colors[c(9, 6, 4)]) +
         theme(legend.text = element_text(
           family = 'Calibri',
-          size = roz_cz
+          size = roz_cz - .5
         )) +
         guides(fill = guide_legend(
           keywidth = leg_sq,
@@ -999,17 +1026,15 @@ main + subplot +
   )
 
 ggsave(
-  filename = 'wykresy/R1_1_v1.png',
+  filename = 'plots/map2.png',
   units = 'cm',
   width = 13,
   height = 12,
-  bg = 'transparent',
+  bg = 'white',
   dpi = 600
 )
 
-# W 1.7. Liczba studentów pozyskanych i utraconych przez uczelnie w wyniku otwierania wydziałów zamiejscowych w innych województwach w 2017 roku ----
-
-## V2
+# Difference plot --------------------------------------------------------------
 
 data_list$plot7 %>%
   slice(-1) %>%
@@ -1064,7 +1089,7 @@ data_list$plot7 %>%
     legend.position = 'top',
     axis.text.x = element_blank()
   ) +
-  scale_fill_manual(values = colors[c(4, 9)]) +
+  scale_fill_manual(values = colors[c(11, 10)]) +
   ylim(c(-1100, 13000)) +
   coord_flip() +
   guides(fill = guide_legend(
@@ -1072,218 +1097,26 @@ data_list$plot7 %>%
     keyheight = leg_sq,
     reverse = TRUE
   )) +
-  scale_color_manual(values = colors[c(4, 9)])
+  scale_color_manual(values = colors[c(11, 10)])
 
 ggsave(
-  filename = 'wykresy/w1_7_v2.png',
+  filename = 'plots/plot7.png',
   units = 'cm',
   width = 13,
   height = 13,
-  bg = 'transparent',
+  bg = 'white',
   dpi = 600
 )
 
 
-# W 3.22. 3.24. 3.26. Współczynnik ukończenia kształcenia (completion rate) na studiach pierwszego stopnia ----
+# Percentage change lollipop plot ----------------------------------------------
 
-data_list$plot8 %>%
-#  mutate(kiedy = fct_relevel(kiedy, 'default', after = 1)) %>%
-  group_by(typ) %>%
+data_list$plot9 %>%
   mutate(
-    razem = sum(n),
-    pct = n / razem,
-    skoncz = kiedy %in% c('on time', 'delay')
+    time = year(time),
+    geo = str_remove(geo, '\\(.+$') %>%
+      str_replace('Former Yugoslav Republic of Macedonia, the', 'Macedonia')
   ) %>%
-  group_by(typ, skoncz) %>%
-  mutate(lab_sum = sum(n)) %>%
-  nest() %>%
-  mutate(xpos = row_number() %>% rev()) %>%
-  unnest() %>%
-  group_by(typ, skoncz) %>%
-  arrange(kiedy) %>%
-  mutate(
-    xmin = xpos - .45,
-    xmax = xpos + .45,
-    ymin = c(0, cumsum(pct)[1]),
-    ymin = if_else(skoncz, ymin, -ymin),
-    ymax = cumsum(pct),
-    ymax = if_else(skoncz, ymax, -ymax),
-    lab_sum_pos = if_else(skoncz, max(ymax) * 1.03, min(ymax) * 1.03),
-    lab_sum_hj = if_else(skoncz, 0, 1),
-    lab_pos = (ymin + ymax) / 2,
-    lab_pos = case_when(
-      typ != 'subgroup 1' &
-        kiedy == 'delay' ~ lab_pos - .01,
-      typ == 'subgroup 1' &
-        kiedy == 'delay' ~ lab_pos - .03,
-      TRUE ~ lab_pos
-    )) %>%
-  group_by(typ) %>%
-  mutate(typ_pos = mean(xpos)) %.>%
-  ggplot(
-    data = .,
-    aes(
-      x = xpos,
-      y = pct,
-      fill = kiedy,
-      group = skoncz,
-      label = (pct * 100) %>%
-        round(if_else(pct < .01, 1, 0)) %>%
-        str_c('%') %>%
-        str_replace('\\.', ',')
-    )) +
-  geom_rect(aes(
-    xmin = xmin,
-    xmax = xmax,
-    ymin = ymin,
-    ymax = ymax
-  )) +
-  geom_text(
-    aes(y = lab_pos),
-    family = 'Calibri',
-    size = roz_cz_txt,
-    color = 'white'
-  ) +
-  geom_text(aes(
-    x = typ_pos,
-    y = -max(pct) * 1.8,
-    label = typ
-  ),
-  family = 'Calibri',
-  size = roz_cz_txt - .2,
-  color = rgb(.1, .1, .1),
-  hjust = 1,
-  check_overlap = TRUE,
-  show.legend = FALSE
-  ) +
-  geom_text(aes(
-    y = lab_sum_pos,
-    hjust = lab_sum_hj,
-    label = lab_sum %>% fmt(),
-    color = skoncz
-  ),
-  family = 'Calibri',
-  size = roz_cz_txt
-  ) +
-  geom_segment(aes(
-    x = Inf,
-    xend = -Inf,
-    y = 0,
-    yend = 0
-  ),
-  color = colors[2]
-  ) +
-  geom_segment(
-    data = group_by(., typ) %>%
-      mutate(
-        xmin = min(xmin) + .2,
-        xmax = max(xmax) - .2
-      ) %>%
-      ungroup() %>%
-      mutate(
-        ymin = -max(pct) * 1.75,
-        ymax = -max(pct) * 1.68
-      ) -> klamra,
-    aes(
-      x = xmax,
-      xend = xmin,
-      y = ymin,
-      yend = ymin
-    ),
-    color = colors[2],
-    size = .5 -> lwd,
-    inherit.aes = FALSE
-  ) +
-  geom_curve(
-    data = klamra,
-    aes(
-      x = xmax,
-      xend = xmax + .2,
-      y = ymin,
-      yend = ymax
-    ),
-    color = colors[2],
-    size = lwd,
-    curvature = -.4,
-    inherit.aes = FALSE
-  ) +
-  geom_curve(
-    data = klamra,
-    aes(
-      x = xmin,
-      xend = xmin - .2,
-      y = ymin,
-      yend = ymax
-    ),
-    color = colors[2],
-    size = lwd,
-    curvature = .4,
-    inherit.aes = FALSE
-  ) +
-  coord_flip() +
-  facet_grid(
-    typ ~ .,
-    scales = 'free',
-    space = 'free'
-  ) +
-  scale_fill_manual(values = c(
-      '#35c2bd',
-      '#f62a66',
-      '#c1c0b9',
-      '#00bbf0'
-    ),
-    breaks = pull(., kiedy) %>%
-      unique() %>%
-      .[c(1, 4, 3, 2)]
-  ) +
-  scale_color_manual(
-    values = colors[c(10, 11)] %>% rev(),
-    labels = c(
-      'count: not payed',
-      'count: payed'
-    )) +
-  scale_y_continuous(
-    breaks = seq(-.6, .6, length.out = 5),
-    labels = (seq(-.6, .6, length.out = 5) * 100) %>% str_c('%') %>% str_remove('-'),
-    limits = c(max(.$pct) * -2.55, max(.$pct) * 1.4)
-  ) +
-  guides(fill = guide_legend(
-    keyheight = leg_sq,
-    keywidth = leg_sq,
-    order = 1
-  ), 
-  color = guide_legend(
-    override.aes = list(label = 'n'),
-    keyheight = leg_sq,
-    keywidth = leg_sq,
-    reverse = TRUE
-  )) +
-  theme(
-    legend.text = element_text(size = 8),
-    axis.text.y = element_blank(),
-    legend.title = element_blank(),
-    legend.spacing.x = unit(1, 'mm'),
-    strip.text = element_blank(),
-    legend.direction = 'vertical',
-    legend.box = 'vertical',
-    legend.spacing = unit(0, 'mm'),
-    legend.box.just = 0,
-    legend.margin = margin()
-  )
-
-ggsave(
-  filename = 'wykresy/w3_22_24_26_v1.png',
-  units = 'cm',
-  width = 13,
-  height = 9,
-  bg = 'transparent',
-  dpi = 400
-)
-
-# ------------------------------
-
-students %>%
-  mutate(time = year(time)) %>%
   filter(
     iscedf13 == "Total",
     isced11 %in% c(
@@ -1298,14 +1131,12 @@ students %>%
   group_by(geo, time) %>%
   summarise(values = sum(values, na.rm = TRUE)) %>%
   ungroup() %>%
-  right_join(eu_trans, by = c("geo" = "eng")) %>%
-  select(geo.y, time, values) %>%
-  rename_at(1, ~ "geo") %>%
   spread(time, values) %>%
   mutate(
     pct = `2016` / `2013` - 1,
     geo = reorder(geo, pct)
-  ) %.>%
+  ) %>%
+  filter(!is.na(pct)) %.>%
   ggplot(
     data = .,
     aes(
@@ -1356,8 +1187,8 @@ students %>%
   bg.color = "white"
   ) +
   coord_flip() +
-  scale_fill_manual(values = plus_minus %>% rev()) +
-  scale_color_manual(values = plus_minus %>% rev()) +
+  scale_fill_manual(values = colors[11:10]) +
+  scale_color_manual(values = colors[11:10]) +
   theme(
     axis.text.x = element_blank(),
     legend.position = "none"
@@ -1365,32 +1196,32 @@ students %>%
   ylim(min(.$pct) * 1.1, max(.$pct) * 1.1)
 
 ggsave(
-  filename = 'wykresy/w3_X1_v2.png',
+  filename = 'plots/plot9.png',
   units = 'cm',
   width = 13,
-  height = 11,
-  bg = 'transparent',
+  height = 13,
+  bg = 'white',
   dpi = 600
 )
 
-# W 3.21. Współczynnik ukończenia kształcenia (completion rate) w wybranych państwach w 2015 roku ----
+# Panel dodged barplot ---------------------------------------------------------
 
-W3_21 %>%
+data_list$plot10 %>%
   arrange(desc(isced6)) %>%
   group_by(typ) %>%
   mutate(
     lp = row_number(),
-    lp = if_else(typ == "metoda cross-cohort", lp + 17.5, lp + 0)
+    lp = if_else(typ == 'method 2', lp + 17.5, lp + 0)
   ) %>%
   gather(isced, n, c(isced6, isced7)) %>%
   mutate(
     n = n / 100,
     lab = case_when(
-      n == 0 & brak == "a" ~ "**",
-      n == 0 & brak == "m" ~ "*",
-      TRUE ~ round(n, 2) %>% scales::percent()
+      n == 0 & brak == 'a' ~ '**',
+      n == 0 & brak == 'm' ~ '*',
+      TRUE ~ round(n, 3) %>% scales::percent()
     ),
-    śr = geo %like% ".*Śr.*"
+    śr = geo %like% '.*Śr.*'
   ) %.>%
   ggplot(
     data = .,
@@ -1401,88 +1232,88 @@ W3_21 %>%
       label = lab
     )) +
   geom_rect(data = tibble(
-    xmin = filter(., geo == "Średnia") %>% pull(lp) - .53,
-    xmax = filter(., geo == "Średnia") %>% pull(lp) + .53,
-    ymin = -Inf,
-    ymax = max(.$n) * 1.13
-  ),
-  aes(
-    xmin = xmin,
-    xmax = xmax,
-    ymin = ymin,
-    ymax = ymax
-  ),
-  inherit.aes = FALSE,
-  fill = podstawowy2,
-  alpha = .1
+      xmin = filter(., geo == 'Średnia') %>% pull(lp) - .53,
+      xmax = filter(., geo == 'Średnia') %>% pull(lp) + .53,
+      ymin = -Inf,
+      ymax = max(.$n) * 1.13
+    ),
+    aes(
+      xmin = xmin,
+      xmax = xmax,
+      ymin = ymin,
+      ymax = ymax
+    ),
+    inherit.aes = FALSE,
+    fill = colors[2],
+    alpha = .1
   ) +
   geom_col(
-    position = "dodge",
+    position = 'dodge',
     width = .8
   ) +
   geom_linerange(aes(
-    x = 17.25,
-    ymin = -Inf,
-    ymax = max(.$n) * 1.3
-  ),
-  color = rgb(.5, .5, .5)
+      x = 17.25,
+      ymin = -Inf,
+      ymax = max(.$n) * 1.3
+    ),
+    color = rgb(.5, .5, .5)
   ) +
   geom_line(data = tibble(
-    x = pull(., lp) %>% range(),
-    y = rep(max(.$n) * 1.15, 2)
-  ),
-  aes(
-    x = x,
-    y = y,
-    group = "x"
-  ),
-  inherit.aes = FALSE,
-  alpha = .3,
-  lwd = .3
+      x = pull(., lp) %>% range(),
+      y = rep(max(.$n) * 1.15, 2)
+    ),
+    aes(
+      x = x,
+      y = y,
+      group = 'x'
+    ),
+    inherit.aes = FALSE,
+    alpha = .3,
+    lwd = .3
   ) +
   geom_text(data = tibble(
-    x = group_by(., typ) %>% summarise(x = mean(lp)) %>% pull(x),
-    y = rep(max(.$n) * 1.2, 2),
-    lab = pull(., typ) %>% unique()
-  ),
-  aes(
-    x = x,
-    y = y,
-    label = lab
-  ),
-  inherit.aes = FALSE,
-  family = "Calibri",
-  size = roz_cz_txt
+      x = group_by(., typ) %>% summarise(x = mean(lp)) %>% pull(x),
+      y = rep(max(.$n) * 1.2, 2),
+      lab = pull(., typ) %>% unique()
+    ),
+    aes(
+      x = x,
+      y = y,
+      label = lab
+    ),
+    inherit.aes = FALSE,
+    family = 'Calibri',
+    size = roz_cz_txt
   ) +
   geom_text(
     aes(y = n + max(n) * .005),
     position = position_dodge(.9),
-    family = "Calibri",
+    family = 'Calibri',
     angle = 90,
     size = roz_cz_txt - .5,
     hjust = 0
   ) +
   geom_text(
-    data = filter(., geo != "Średnia"),
+    data = filter(., geo != 'Średnia'),
     aes(
       y = -max(n) * .02,
       label = geo
     ),
-    family = "Calibri",
+    family = 'Calibri',
     angle = 90,
     size = roz_cz_txt - .5,
     hjust = 1,
     check_overlap = TRUE
   ) +
   geom_text(
-    data = filter(., geo == "Średnia"),
+    data = filter(., geo == 'Średnia'),
     aes(
-      y = -max(n) * .02,
+      y = -max(n, na.rm = TRUE) * .02,
       label = geo
     ),
-    family = "Calibri",
+    family = 'Calibri',
     angle = 90,
-    fontface = "bold",
+    fontface = 'bold',
     size = roz_cz_txt,
     hjust = 1,
     check_overlap = TRUE
@@ -1498,148 +1329,29 @@ W3_21 %>%
   ) +
   scale_fill_manual(
     labels = c(
-      "studia licencjackie i ich odpowiednik (ISCED 6)",
-      "studia magisterskie i ich odpowiednik (ISCED 7)"),
-    values = c(podstawowy2, podstawowy)
+      'type 1',
+      'type 2'),
+    values = colors[c(1, 2)]
   ) +
-  scale_color_manual(values = c("white", paleta_ald[2])) +
+  scale_color_manual(values = c('white', colors[4])) +
   theme(
     axis.text.x = element_blank(),
     legend.title = element_blank(),
-    legend.spacing.x = unit(1, "mm"),
+    legend.spacing.x = unit(1, 'mm'),
     legend.position = c(.5, 1),
-    legend.direction = "horizontal"
+    legend.direction = 'horizontal'
   )
 
 ggsave(
-  filename = 'wykresy/w3_21_v1.png',
+  filename = 'plots/plot10.png',
   units = 'cm',
   width = 21,
   height = 11,
-  bg = 'transparent',
+  bg = 'white',
   dpi = 600
 )
 
-# --------------------------------------------
-
-umiedz$`W 7.` %>%
-  rename_all(~str_remove(., 'liczba studentów ')) %>%
-  slice(4) %>%
-  gather(typ, n, -1) %>%
-  select(-1) %>%
-  separate(typ, c('typ', 'rok'), sep = ' ') %>%
-  mutate(
-    pct = umiedz$`W 8.` %>% slice(4) %>% gather(typ, n, -1) %>% pull(n),
-    pct_pos = pct * max(n, na.rm = TRUE) * 40 + max(n, na.rm = TRUE) * .6
-  ) %>%
-  filter(
-    !is.na(n),
-    rok != '2012/2013'
-  ) %>%
-  group_by(rok) %>%
-  nest() %>%
-  mutate(xpos = row_number()) %>%
-  unnest() %.>%
-  ggplot(
-    data = .,
-    aes(
-      x = xpos,
-      y = n,
-      fill = typ,
-      color = typ,
-      label = n %>% fmt()
-    )) +
-  geom_line(
-    aes(y = pct_pos),
-    position = position_dodge(.9),
-    linetype = 'dotted',
-    alpha = .3
-  ) +
-  geom_col(
-    position = position_dodge(.9),
-    col = 'white'
-  ) +
-  geom_point(
-    aes(y = pct_pos),
-    position = position_dodge(.9),
-    size = 7
-  ) +
-  geom_text(
-    aes(y = n + max(n) * .04),
-    position = position_dodge(.9),
-    family = 'Calibri',
-    size = roz_cz_txt,
-    color = rgb(.1, .1, .1)
-  ) +
-  geom_text(
-    aes(
-      y = pct_pos,
-      label = (pct * 100) %>% round(1) %>% format(decimal.mark = ',')
-    ),
-    position = position_dodge(.9),
-    family = 'Calibri',
-    color = 'white',
-    size = roz_cz_txt
-  ) +
-  geom_text(
-    aes(
-      y = pct_pos,
-      x = xpos + .15,
-      label = '%'
-    ),
-    position = position_dodge(.9),
-    family = 'Calibri',
-    size = roz_cz_txt
-  ) +
-  geom_text(
-    data = tibble(x = c(1.2, 2.7)),
-    aes(
-      x = x,
-      y = max(.$pct_pos) * 1.24,
-      label = str_c(
-        c('przyjeżdżający', 'wyjeżdżający'),
-        ':\n      udział w ogóle studentów\n      liczba'
-      )
-    ),
-    family = 'Calibri',
-    hjust = 0,
-    size = roz_cz_txt,
-    inherit.aes = FALSE
-  ) +
-  geom_point(
-    data = tibble(x = c(1.25, 2.75, 1.25, 2.75)),
-    aes(
-      x = x,
-      y = max(.$pct_pos) * c(1.24, 1.24, 1.16, 1.16) ,
-      color = c('1', '2', '1', '2'),
-      shape = c('1', '1', '2', '2')
-    ),
-    size = 4.5,
-    inherit.aes = FALSE
-  ) +
-  scale_fill_manual(values = plus_minus) +
-  scale_shape_manual(values = 16:15) +
-  scale_color_manual(values = plus_minus %>% rep(2)) +
-  scale_x_continuous(
-    breaks = 1:4,
-    labels = pull(., rok) %>% unique()
-  ) +
-  theme(
-    legend.position = 'none',
-    axis.text.y = element_blank()
-  ) +
-  ylim(c(NA, max(.$pct_pos) * 1.28))
-
-ggsave(
-  filename = 'wykresy/wUX1_v1.png',
-  units = 'cm',
-  width = 13,
-  height = 9,
-  bg = 'transparent',
-  dpi = 600
-)
-
-# R UZ.9. studenci z Polski na uczelniach za granicą (pełne studia) ----
+# Wordl destinations map -------------------------------------------------------
 
 wrld <- rgdal::readOGR('maps/TM_WORLD_BORDERS-0.3.shp', 'TM_WORLD_BORDERS-0.3')
 
@@ -1741,7 +1453,7 @@ wrld_rob %>%
       fill = clr
     ),
     col = 'steelblue',
-    size = .00001,
+    size = .000001,
     show.legend = FALSE
   ) +
   geom_curve(
@@ -1788,12 +1500,12 @@ wrld_rob %>%
     na.value = 'white'
   ) +
   scale_size_manual(
-    values = c(.4, .7, .1, 1.1) %>% rev(),
+    values = c(.3, .55, .1, .9) %>% rev(),
     labels = c(' 1 - 100', ' 101 - 1000', ' 1001 - 5000', ' > 5000')
   ) +
   guides(size = guide_legend(
     override.aes = list(
-      color = colors[c(12, 15, 13, 14)],
+      color = colors[c(15, 14, 13, 12)],
       size = c(1.1, .7, .4, .1) %>% rev())
   ),
   color = FALSE) +
@@ -1844,7 +1556,7 @@ wrld_rob %>%
         high = colors[2],
         na.value = 'white'
       ) +
-      scale_size_manual(values = c(1.1, .7, .4, .1) %>% rev())),
+      scale_size_manual(values = c(.9, .1, .55, .3))),
     xmin = -2e6,
     xmax = 14e6,
     ymin = -14e6,
@@ -1852,157 +1564,25 @@ wrld_rob %>%
   )
 
 ggsave(
-  filename = 'wykresy/rUZ9_v2.png',
+  filename = 'plots/map3.png',
   units = 'cm',
   width = 15,
   height = 14,
-  bg = 'transparent',
-  dpi = 400
+  bg = 'white',
+  dpi = 800
 )
 
-# W UZD. 2. Liczba i odsetek cudzoziemców wśród studentów w podziale na studia I i II stopnia i jednolite magisterskie ----
+# World waffle map -------------------------------------------------------------
 
-pal <- c('#933f99', '#005792', '#278ea5') %>% rev()
+wrld <- rgdal::readOGR('maps/TM_WORLD_BORDERS-0.3.shp', 'TM_WORLD_BORDERS-0.3')
 
-umiedz$`D 3.` %>%
-  as_cells() %>%
-  behead('N', rok) %>%
-  behead('N', ucz) %>%
-  behead('W', typ) %>%
-  fill(rok, ucz, typ) %>%
-  filter(
-    ucz == 'ogółem',
-    typ != 'ogółem',
-    chr != '%'
-  ) %>%
-  mutate(
-    n = as.numeric(chr),
-    pct = if_else(n > 1, 'n', 'pct')
-  ) %>%
-  select(c(5, 7:9)) %>%
-  spread(pct, n) %>%
-  mutate(
-    rok = rok %>% as.numeric(),
-    pct_pos = pct * max(n) * 3,
-    hj = case_when(
-      typ == 'studia jednolite magisterskie' ~ .35,
-      typ == 'studia II stopnia' ~ .65,
-      typ == 'studia I stopnia' ~ .5
-    ),
-    pct_pos = pct_pos * 3 + max(n) * 0.7,
-    x_pos = case_when(
-      typ == 'studia II stopnia' ~ rok + .2,
-      typ == 'studia I stopnia' ~ rok - .2,
-      TRUE ~ rok
-  )) %>%
-  ggplot(aes(
-    x = rok,
-    y = n,
-    fill = typ,
-    color = typ,
-    label = n %>% fmt()
-  )) +
-  geom_col(
-    position = position_dodge(.9),
-    show.legend = FALSE,
-    col = 'white',
-    lwd = .2
-  ) +
-  geom_label(aes(
-      y = n + max(n) * .028,
-      hjust = hj
-    ),
-    position = position_dodge(.9),
-    family = 'Calibri',
-    fill = 'white',
-    label.padding = unit(.07, 'lines'),
-    label.size = .001,
-    size = 3
-  ) +
-  geom_line(aes(
-      y = pct_pos,
-      x = x_pos,
-      group = typ
-    ),
-    color = podstawowy2,
-    linetype = 'dotted'
-  ) +
-  geom_point(aes(
-      y = pct_pos,
-      x = x_pos
-    ),
-    size = 6 
-  ) +
-  geom_text(aes(
-    y = pct_pos,
-    x = x_pos,
-    label = (pct * 100) %>%
-      round(1) %>%
-      str_replace('\\.', ',')
-  ),
-  family = 'Calibri',
-  color = 'white',
-  size = 3
-  ) +
-  geom_shadowtext(aes(
-    y = pct_pos,
-    x = x_pos + .2,
-    label = '%'
-  ),
-  family = 'Calibri',
-  size = 3,
-  bg.color = 'white'
-  ) +
-  guides(
-    fill = guide_legend(override.aes = list(
-      size = 4,
-      shape = 15,
-      color = pal),
-      title = 'liczba cudzoziemców\nna studiach:',
-      keyheight = leg_sq,
-      keywidth = leg_sq,
-      order = 1
-    ),
-    color = guide_legend(
-      override.aes = list(size = 4),
-      title = 'udział cudzoziemców wśród\nstudentów na studiach:',
-      keyheight = leg_sq,
-      keywidth = leg_sq,
-      order = 2
-    )) +
-  scale_x_continuous(breaks = 2012:2017) +
-  scale_fill_manual(
-    values = pal,
-    labels = c('I stopnia', 'II stopnia', 'jednolitych magisterskich')
-  ) +
-  scale_color_manual(
-    values = pal,
-    labels = c('I stopnia ', 'II stopnia', 'jednolitych magisterskich')
-  ) +
-  theme(
-    axis.text.y = element_blank(),
-    legend.direction = 'vertical',
-    legend.title = element_text(size = 9),
-    legend.text = element_text(size = 9)
-  )
-
-ggsave(
-  filename = 'wykresy/wUZD_2_v2.png',
-  units = 'cm',
-  width = 13,
-  height = 12,
-  bg = 'transparent',
-  dpi = 400
-)
-
-# R 4.1. Umowy dwustronne o współpracy naukowej i zakresie szkolnictwa wyższego ----
-
-# to do szkolnictwa!
+grat <-
+  readOGR('maps/ne_110m_graticules_30.shp', 'ne_110m_graticules_30') %>%
+  spTransform(CRS('+proj=robin')) %>%
+  fortify()
 
 dane <-
-  dwustr %>%
-  select(c(1, 2, 4)) %>%
-  set_names(c('geo', 'ISO2', 'n')) %>%
+  data_list$map4 %>%
   filter(!n %in% c('41295', NA)) %>%
   mutate(
     lp = row_number(),
@@ -2107,7 +1687,7 @@ subplots <-
           legend_pos = "none",          
           size = .3,
           rows = n_row,
-          colors = paleta_ald[c(2, 4, 7)]
+          colors = colors[c(4, 6, 9)]
         )
       ),
       xmin = long2 - mar * 1e6,
@@ -2240,38 +1820,38 @@ main <-
   ) +
   theme_map() +
   scale_fill_gradientn(colors = c(
-    "#f0fff3",
-    "#2796cb",
-    "#062743",
-    'black'
-  ),
-  na.value = 'white'
+      "#f0fff3",
+      "#2796cb",
+      "#062743",
+      'black'
+    ),
+    na.value = 'white'
   ) +
   scale_color_manual(
     values = linia %>% rep(3),
     breaks = c('x', 'y', 'z'),
-    labels = c('nauki', 'szkolnictwa wyższego', 'nauki i szkolnictwa wyższego')
+    labels = c('type 1', 'type 2', 'type 3')
   ) +
   guides(fill = guide_colorbar(
-    barheight = unit(4, "mm"),
-    direction = 'horizontal',
-    label.position = 'bottom',
-    title.position = 'top',
-    title.hjust = .5,
-    title.vjust = -39,
-    label.vjust = 40,
-    order = 2,
-    title = 'liczba podpisanych umów'
-  ),
-  color = guide_legend(override.aes = list(
-    shape = 15,
-    size = 4,
-    color = paleta_ald[c(4, 7, 2)]
-  ),
-  keywidth = .75,
-  keyheight = .75,
-  order = 1,
-  title = 'współpraca w zakresie:'
+      barheight = unit(4, "mm"),
+      direction = 'horizontal',
+      label.position = 'bottom',
+      title.position = 'top',
+      title.hjust = .5,
+      title.vjust = -39,
+      label.vjust = 40,
+      order = 2,
+      title = 'overall'
+    ),
+    color = guide_legend(override.aes = list(
+        shape = 15,
+        size = 4,
+        color = colors[c(6, 9, 4)]
+      ),
+      keywidth = .75,
+      keyheight = .75,
+      order = 1,
+      title = ''
   )) +
   theme(
     legend.position = c(.5, .32),
@@ -2287,3 +1867,12 @@ main <-
   coord_equal()
 
 main + subplots
+
+ggsave(
+  filename = 'plots/map4.png',
+  units = 'cm',
+  width = 15,
+  height = 14,
+  bg = 'white',
+  dpi = 800
+)
